@@ -12,11 +12,6 @@ namespace WhatChanged.Core;
 /// </summary>
 public class WhatChangedManager
 {
-    private readonly ArchiveService _archiveService = new();
-    private readonly ComparisonService _comparisonService = new();
-    private readonly ManifestService _manifestService = new();
-    private readonly SnapshotService _snapshotService = new();
-
     /// <summary>
     ///     Generates a snapshot of the specified directory.
     /// </summary>
@@ -39,9 +34,9 @@ public class WhatChangedManager
     /// <param name="baseline">The baseline manifest.</param>
     /// <param name="current">The current manifest.</param>
     /// <returns>A report detailing added, modified, and removed files.</returns>
-    public ChangeReport CompareSnapshots(Manifest baseline, Manifest current)
+    public static ChangeReport CompareSnapshots(Manifest baseline, Manifest current)
     {
-        return _comparisonService.GenerateChangeReport(baseline.Entries, current.Entries);
+        return ComparisonService.GenerateChangeReport(baseline.Entries, current.Entries);
     }
 
     /// <summary>
@@ -99,8 +94,8 @@ public class WhatChangedManager
     /// <param name="rootDirectory">The root directory of the application being updated.</param>
     /// <param name="report">The change report containing the files to include.</param>
     /// <returns>The path to the created archive.</returns>
-    public string CreateUpdateArchive(DirectoryInfo rootDirectory, ChangeReport report)
+    public static string CreateUpdateArchive(DirectoryInfo rootDirectory, ChangeReport report)
     {
-        return _archiveService.CreateUpdateArchive(rootDirectory, report);
+        return ArchiveService.CreateUpdateArchive(rootDirectory, report);
     }
 }
