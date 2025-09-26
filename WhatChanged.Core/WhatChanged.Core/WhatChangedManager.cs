@@ -23,9 +23,9 @@ public class WhatChangedManager
     /// <param name="path">The root directory to snapshot.</param>
     /// <param name="baseline">An optional baseline manifest to optimize hashing.</param>
     /// <returns>A new manifest representing the state of the directory.</returns>
-    public async Task<Manifest> CreateSnapshotAsync(string path, Manifest? baseline = null)
+    public static async Task<Manifest> CreateSnapshotAsync(string path, Manifest? baseline = null)
     {
-        var snapshotEntries = await _snapshotService.CreateSnapshotAsync(path, baseline?.Entries);
+        var snapshotEntries = await SnapshotService.CreateSnapshotAsync(path, baseline?.Entries);
         return new Manifest
         {
             TimestampUtc = DateTime.UtcNow,
@@ -48,13 +48,13 @@ public class WhatChangedManager
     ///     Reads the most recent manifest file from the specified directory.
     /// </summary>
     /// <returns>The most recent manifest, or a new empty Manifest if none are found.</returns>
-    public async Task<Manifest> ReadManifestAsync(DirectoryInfo directory)
+    public static async Task<Manifest> ReadManifestAsync(DirectoryInfo directory)
     {
         var latestManifest = directory.GetFiles("WhatChanged.*.manifest")
             .OrderByDescending(f => f.Name)
             .FirstOrDefault();
 
-        if (latestManifest != null) return await _manifestService.ReadManifestAsync(latestManifest.FullName);
+        if (latestManifest != null) return await ManifestService.ReadManifestAsync(latestManifest.FullName);
 
         // Return a new, empty manifest if no files were found.
         return new Manifest();
@@ -64,23 +64,23 @@ public class WhatChangedManager
     /// <summary>
     ///     Reads a manifest file from the specified path.
     /// </summary>
-    public async Task<Manifest> ReadManifestAsync(string manifestPath)
+    public static async Task<Manifest> ReadManifestAsync(string manifestPath)
     {
-        return await _manifestService.ReadManifestAsync(manifestPath);
+        return await ManifestService.ReadManifestAsync(manifestPath);
     }
 
     /// <summary>
     ///     Writes a manifest to a new file with a UTC timestamp in the name (e.g., WhatChanged.20240101-123000.manifest).
     /// </summary>
     /// <returns>The full path of the manifest file that was written.</returns>
-    public async Task<string> WriteManifestAsync(DirectoryInfo directory, Manifest manifest)
+    public static async Task<string> WriteManifestAsync(DirectoryInfo directory, Manifest manifest)
     {
         // Use the manifest's timestamp for the filename to ensure it matches the content.
         var timestamp = manifest.TimestampUtc.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
         var manifestFileName = $"WhatChanged.{timestamp}.manifest";
         var manifestPath = Path.Combine(directory.FullName, manifestFileName);
 
-        await _manifestService.WriteManifestAsync(manifestPath, manifest);
+        await ManifestService.WriteManifestAsync(manifestPath, manifest);
 
         return manifestPath;
     }
@@ -88,9 +88,9 @@ public class WhatChangedManager
     /// <summary>
     ///     Writes a manifest to the specified path.
     /// </summary>
-    public async Task WriteManifestAsync(string manifestPath, Manifest manifest)
+    public static async Task WriteManifestAsync(string manifestPath, Manifest manifest)
     {
-        await _manifestService.WriteManifestAsync(manifestPath, manifest);
+        await ManifestService.WriteManifestAsync(manifestPath, manifest);
     }
 
     /// <summary>

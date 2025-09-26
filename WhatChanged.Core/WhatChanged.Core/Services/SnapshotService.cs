@@ -6,7 +6,7 @@ namespace WhatChanged.Core.Services;
 
 public class SnapshotService
 {
-    public async Task<Dictionary<string, FileSystemEntry>> CreateSnapshotAsync(
+    public static async Task<Dictionary<string, FileSystemEntry>> CreateSnapshotAsync(
         string rootPath,
         IReadOnlyDictionary<string, FileSystemEntry>? baseline = null,
         Action<string>? log = null,
@@ -47,42 +47,43 @@ public class SnapshotService
                 filesToHash.Add((relativePath, entryPath, size, lastWriteUtc));
         }
 
-        if (filesToHash.Any())
+        if (filesToHash.Count > 0)
         {
             var hashedEntries = await HashFilesAsync(filesToHash, log, cancellationToken);
             foreach (var kvp in hashedEntries) entries[kvp.Key] = kvp.Value;
         }
 
         return entries;
-    }
 
-    private async Task<ConcurrentDictionary<string, FileSystemEntry>> HashFilesAsync(
-        List<(string relativePath, string fullPath, long size, DateTime lastWriteUtc)> files,
-        Action<string>? log = null,
-        CancellationToken cancellationToken = default)
-    {
-        var hashedEntries = new ConcurrentDictionary<string, FileSystemEntry>(StringComparer.OrdinalIgnoreCase);
-        var parallelOptions = new ParallelOptions
+        static async Task<ConcurrentDictionary<string, FileSystemEntry>> HashFilesAsync(
+            List<(string relativePath, string fullPath, long size, DateTime lastWriteUtc)> files,
+            Action<string>? log = null,
+            CancellationToken cancellationToken = default)
         {
-            MaxDegreeOfParallelism = Environment.ProcessorCount,
-            CancellationToken = cancellationToken
-        };
-
-        await Parallel.ForEachAsync(files, parallelOptions, async (file, token) =>
-        {
-            try
+            var hashedEntries = new ConcurrentDictionary<string, FileSystemEntry>(StringComparer.OrdinalIgnoreCase);
+            var parallelOptions = new ParallelOptions
             {
-                var hash = await CalculateXxHash64Async(file.fullPath, token);
-                var entry = new FileSystemEntry(EntryType.File, file.relativePath, hash, file.size, file.lastWriteUtc);
-                hashedEntries[file.relativePath] = entry;
-            }
-            catch (Exception ex)
-            {
-                log?.Invoke($"Failed to hash '{file.relativePath}': {ex.Message}");
-            }
-        });
+                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                CancellationToken = cancellationToken
+            };
 
-        return hashedEntries;
+            await Parallel.ForEachAsync(files, parallelOptions, async (file, token) =>
+            {
+                try
+                {
+                    var hash = await CalculateXxHash64Async(file.fullPath, token);
+                    var entry = new FileSystemEntry(EntryType.File, file.relativePath, hash, file.size,
+                        file.lastWriteUtc);
+                    hashedEntries[file.relativePath] = entry;
+                }
+                catch (Exception ex)
+                {
+                    log?.Invoke($"Failed to hash '{file.relativePath}': {ex.Message}");
+                }
+            });
+
+            return hashedEntries;
+        }
     }
 
     private static async Task<string> CalculateXxHash64Async(string filePath, CancellationToken cancellationToken)

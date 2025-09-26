@@ -9,7 +9,7 @@ public class ArchiveService
     private const string ParamName = "rootDirectory";
 
     public string CreateUpdateArchive(DirectoryInfo rootDirectory, ChangeReport report)
-    {   
+    {
         var sevenZipPath = TryFind7Z();
 
         if (string.IsNullOrEmpty(sevenZipPath))
@@ -17,7 +17,7 @@ public class ArchiveService
                 "7-Zip executable (7za.exe or 7z.exe) not found. Please ensure it is in the application's directory or in your system's PATH.");
 
         return Create7ZArchive(sevenZipPath, rootDirectory, report);
-    }       
+    }
 
     private static string? TryFind7Z()
     {

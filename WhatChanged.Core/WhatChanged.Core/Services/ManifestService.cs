@@ -6,7 +6,7 @@ namespace WhatChanged.Core.Services;
 
 public class ManifestService
 {
-    public async Task<Manifest> ReadManifestAsync(string manifestPath)
+    public static async Task<Manifest> ReadManifestAsync(string manifestPath)
     {
         var manifest = new Manifest();
         if (string.IsNullOrEmpty(manifestPath) || !File.Exists(manifestPath))
@@ -50,8 +50,8 @@ public class ManifestService
                 var right = partsLine[1].Trim();
                 var metaParts = right.Split('|', StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).ToArray();
                 var hash = metaParts.Length > 0 ? metaParts[0] : string.Empty;
-                long.TryParse(metaParts.Length > 1 ? metaParts[1] : "0", out var size);
-                DateTime.TryParse(metaParts.Length > 2 ? metaParts[2] : "", null,
+                _ = long.TryParse(metaParts.Length > 1 ? metaParts[1] : "0", out var size);
+                _ = DateTime.TryParse(metaParts.Length > 2 ? metaParts[2] : "", null,
                     DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var lastWriteUtc);
 
                 if (Enum.TryParse<EntryType>(typeStr, true, out var type))
@@ -62,7 +62,7 @@ public class ManifestService
         return manifest;
     }
 
-    public async Task WriteManifestAsync(string manifestPath, Manifest manifest)
+    public static async Task WriteManifestAsync(string manifestPath, Manifest manifest)
     {
         var sb = new StringBuilder();
         sb.AppendLine("# WhatChanged Baseline Manifest");
