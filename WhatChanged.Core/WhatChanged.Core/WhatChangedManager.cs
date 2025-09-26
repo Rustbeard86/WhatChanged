@@ -1,4 +1,5 @@
-﻿using WhatChanged.Core.Models;
+﻿using System.Globalization;
+using WhatChanged.Core.Models;
 using WhatChanged.Core.Services;
 
 // ReSharper disable UnusedMember.Global
@@ -44,11 +45,44 @@ public class WhatChangedManager
     }
 
     /// <summary>
+    ///     Reads the most recent manifest file from the specified directory.
+    /// </summary>
+    /// <returns>The most recent manifest, or a new empty Manifest if none are found.</returns>
+    public async Task<Manifest> ReadManifestAsync(DirectoryInfo directory)
+    {
+        var latestManifest = directory.GetFiles("WhatChanged.*.manifest")
+            .OrderByDescending(f => f.Name)
+            .FirstOrDefault();
+
+        if (latestManifest != null) return await _manifestService.ReadManifestAsync(latestManifest.FullName);
+
+        // Return a new, empty manifest if no files were found.
+        return new Manifest();
+    }
+
+
+    /// <summary>
     ///     Reads a manifest file from the specified path.
     /// </summary>
     public async Task<Manifest> ReadManifestAsync(string manifestPath)
     {
         return await _manifestService.ReadManifestAsync(manifestPath);
+    }
+
+    /// <summary>
+    ///     Writes a manifest to a new file with a UTC timestamp in the name (e.g., WhatChanged.20240101-123000.manifest).
+    /// </summary>
+    /// <returns>The full path of the manifest file that was written.</returns>
+    public async Task<string> WriteManifestAsync(DirectoryInfo directory, Manifest manifest)
+    {
+        // Use the manifest's timestamp for the filename to ensure it matches the content.
+        var timestamp = manifest.TimestampUtc.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        var manifestFileName = $"WhatChanged.{timestamp}.manifest";
+        var manifestPath = Path.Combine(directory.FullName, manifestFileName);
+
+        await _manifestService.WriteManifestAsync(manifestPath, manifest);
+
+        return manifestPath;
     }
 
     /// <summary>
