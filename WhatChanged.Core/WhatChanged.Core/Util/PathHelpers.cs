@@ -1,4 +1,4 @@
-﻿namespace WhatChanged.Core.Services;
+﻿namespace WhatChanged.Core.Util;
 
 internal static class PathHelpers
 {

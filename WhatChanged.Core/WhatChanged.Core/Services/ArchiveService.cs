@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Text;
 using WhatChanged.Core.Models;
+using WhatChanged.Core.Util;
 
 namespace WhatChanged.Core.Services;
 
