@@ -9,12 +9,4 @@ internal static class PathHelpers
             ? manifestRelative
             : manifestRelative.Replace('/', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);
     }
-
-    // Convert to a normalized archive entry path (always forward slashes)
-    public static string ToArchiveEntryPath(string manifestRelative)
-    {
-        return string.IsNullOrEmpty(manifestRelative)
-            ? manifestRelative
-            : manifestRelative.Replace('\\', '/').TrimStart('/', '\\');
-    }
 }
