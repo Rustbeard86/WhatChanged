@@ -13,13 +13,13 @@ public class ManifestService
             return manifest;
 
         var lineNumber = 0;
-        try
+        await foreach (var line in File.ReadLinesAsync(manifestPath))
         {
-            await foreach (var line in File.ReadLinesAsync(manifestPath))
-            {
-                lineNumber++;
-                if (string.IsNullOrWhiteSpace(line)) continue;
+            lineNumber++;
+            if (string.IsNullOrWhiteSpace(line)) continue;
 
+            try
+            {
                 if (line.StartsWith('#'))
                 {
                     var parts = line.TrimStart('#').Trim().Split(':', 2);
@@ -64,14 +64,14 @@ public class ManifestService
                         manifest.Entries[path] = new FileSystemEntry(type, path, hash, size, lastWriteUtc);
                 }
             }
+            catch (Exception ex) when (ex is FormatException or IndexOutOfRangeException or ArgumentException)
+            {
+                throw new ManifestException($"Failed to parse line {lineNumber} in manifest.", manifestPath, lineNumber,
+                    line, ex);
+            }
+        }
 
-            return manifest;
-        }
-        catch (Exception ex)
-        {
-            throw new ManifestException($"Failed to read or parse manifest '{manifestPath}'.", manifestPath, lineNumber,
-                lineNumber > 0 ? File.ReadLines(manifestPath).Skip(lineNumber - 1).FirstOrDefault() : null, ex);
-        }
+        return manifest;
     }
 
     public static async Task WriteManifestAsync(string manifestPath, Manifest manifest)
@@ -99,7 +99,7 @@ public class ManifestService
         }
         catch (Exception ex)
         {
-            throw new ManifestException($"Failed to write manifest to '{manifestPath}'.", manifestPath, false, ex);
+            throw new ManifestException("Failed to write manifest file.", manifestPath, false, ex);
         }
     }
 }
