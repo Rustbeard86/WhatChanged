@@ -9,7 +9,7 @@ public class ManifestService
     private const string ManifestFilePrefix = "WhatChanged_";
     private const string ManifestFileExtension = ".txt";
 
-    public async Task<Manifest> ReadAsync(string manifestPath)
+    public async Task<Manifest> ReadManifestAsync(string manifestPath)
     {
         var manifest = new Manifest();
         if (string.IsNullOrEmpty(manifestPath) || !File.Exists(manifestPath))
@@ -65,7 +65,7 @@ public class ManifestService
         return manifest;
     }
 
-    public async Task WriteAsync(string manifestPath, Manifest manifest)
+    public async Task WriteManifestAsync(string manifestPath, Manifest manifest)
     {
         var sb = new StringBuilder();
         sb.AppendLine("# WhatChanged Baseline Manifest");

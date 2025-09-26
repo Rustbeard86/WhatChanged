@@ -8,7 +8,7 @@ public class ArchiveService
 {
     private const string ParamName = "rootDirectory";
 
-    public string CreateArchiveAsync(DirectoryInfo rootDirectory, ChangeReport report)
+    public string CreateUpdateArchive(DirectoryInfo rootDirectory, ChangeReport report)
     {   
         var sevenZipPath = TryFind7Z();
 

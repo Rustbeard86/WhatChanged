@@ -6,7 +6,7 @@ namespace WhatChanged.Core.Services;
 
 public class SnapshotService
 {
-    public async Task<Dictionary<string, FileSystemEntry>> CreateAsync(
+    public async Task<Dictionary<string, FileSystemEntry>> CreateSnapshotAsync(
         string rootPath,
         IReadOnlyDictionary<string, FileSystemEntry>? baseline = null,
         Action<string>? log = null,
@@ -14,7 +14,7 @@ public class SnapshotService
     {
         var entries = new Dictionary<string, FileSystemEntry>(StringComparer.OrdinalIgnoreCase);
         var filesToHash = new List<(string relativePath, string fullPath, long size, DateTime lastWriteUtc)>();
-            
+
         var enumerationOptions = new EnumerationOptions
         {
             RecurseSubdirectories = true,

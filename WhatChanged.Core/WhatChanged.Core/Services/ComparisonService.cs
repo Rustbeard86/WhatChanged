@@ -4,7 +4,7 @@ namespace WhatChanged.Core.Services;
 
 public class ComparisonService
 {
-    public ChangeReport Compare(
+    public ChangeReport GenerateChangeReport(
         IReadOnlyDictionary<string, FileSystemEntry> baseline,
         IReadOnlyDictionary<string, FileSystemEntry> current)
     {
