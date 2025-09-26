@@ -10,16 +10,17 @@ public class ArchiveService
 
     public static string CreateUpdateArchive(DirectoryInfo rootDirectory, ChangeReport report)
     {
-        var sevenZipPath = TryFind7Z();
+        var (sevenZipPath, triedPaths) = TryFind7Z();
 
         if (string.IsNullOrEmpty(sevenZipPath))
-            throw new InvalidOperationException(
-                "7-Zip executable (7za.exe or 7z.exe) not found. Please ensure it is in the application's directory or in your system's PATH.");
+            throw new ArchiveException(
+                "7-Zip executable (7za.exe or 7z.exe) not found. Please ensure it is in the application's directory or in your system's PATH.",
+                triedPaths);
 
         return Create7ZArchive(sevenZipPath, rootDirectory, report);
     }
 
-    private static string? TryFind7Z()
+    private static (string? path, IReadOnlyList<string> triedPaths) TryFind7Z()
     {
         var candidates = new List<string>();
 
@@ -62,18 +63,23 @@ public class ArchiveService
             /* ignored */
         }
 
+        var tried = new List<string>();
+
         foreach (var c in candidates.Where(p => !string.IsNullOrEmpty(p)))
+        {
+            tried.Add(c);
             try
             {
                 if (File.Exists(c))
-                    return c;
+                    return (c, tried);
             }
             catch
             {
                 /* ignored */
             }
+        }
 
-        return null;
+        return (null, tried);
     }
 
     private static string Create7ZArchive(string sevenZipPath, DirectoryInfo rootDirectory, ChangeReport report)
@@ -81,10 +87,26 @@ public class ArchiveService
         var archiveName = $"{rootDirectory.Name}.7z";
         var archivePath = Path.Combine(rootDirectory.Parent!.FullName, archiveName);
 
-        if (File.Exists(archivePath)) File.Delete(archivePath);
+        try
+        {
+            if (File.Exists(archivePath)) File.Delete(archivePath);
+        }
+        catch (Exception ex)
+        {
+            throw new ArchiveException($"Failed to delete existing archive at '{archivePath}'.", archivePath,
+                string.Empty, innerException: ex);
+        }
 
         var tempDir = Path.Combine(Path.GetTempPath(), "WhatChanged_" + Guid.NewGuid());
-        Directory.CreateDirectory(tempDir);
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+        }
+        catch (Exception ex)
+        {
+            throw new ArchiveException($"Failed to create temporary directory '{tempDir}'.", archivePath, tempDir,
+                innerException: ex);
+        }
 
         try
         {
@@ -96,47 +118,61 @@ public class ArchiveService
                 var sourcePath = Path.Combine(rootDirectory.FullName, relativeForFileSystem);
                 var destPath = Path.Combine(tempDir, relativeForFileSystem);
 
-                switch (item.Type)
+                try
                 {
-                    case EntryType.File:
-                        if (!File.Exists(sourcePath)) continue;
-                        Directory.CreateDirectory(Path.GetDirectoryName(destPath) ?? tempDir);
-                        File.Copy(sourcePath, destPath, true);
-                        break;
+                    switch (item.Type)
+                    {
+                        case EntryType.File:
+                            if (!File.Exists(sourcePath)) continue;
+                            Directory.CreateDirectory(Path.GetDirectoryName(destPath) ?? tempDir);
+                            File.Copy(sourcePath, destPath, true);
+                            break;
 
-                    case EntryType.Directory:
-                        if (!Directory.Exists(sourcePath)) continue;
-                        foreach (var file in Directory.EnumerateFiles(sourcePath, "*", SearchOption.AllDirectories))
-                        {
-                            var rel = Path.GetRelativePath(rootDirectory.FullName, file)
-                                .Replace(Path.DirectorySeparatorChar, '/');
-                            var relFs = PathHelpers.ToPlatformPath(rel);
-                            var target = Path.Combine(tempDir, relFs);
-                            Directory.CreateDirectory(Path.GetDirectoryName(target) ?? tempDir);
-                            File.Copy(file, target, true);
-                        }
+                        case EntryType.Directory:
+                            if (!Directory.Exists(sourcePath)) continue;
+                            foreach (var file in Directory.EnumerateFiles(sourcePath, "*", SearchOption.AllDirectories))
+                            {
+                                var rel = Path.GetRelativePath(rootDirectory.FullName, file)
+                                    .Replace(Path.DirectorySeparatorChar, '/');
+                                var relFs = PathHelpers.ToPlatformPath(rel);
+                                var target = Path.Combine(tempDir, relFs);
+                                Directory.CreateDirectory(Path.GetDirectoryName(target) ?? tempDir);
+                                File.Copy(file, target, true);
+                            }
 
-                        if (!Directory.EnumerateFileSystemEntries(sourcePath).Any())
-                        {
-                            var placeholderDir = Path.Combine(tempDir, relativeForFileSystem);
-                            Directory.CreateDirectory(placeholderDir);
-                            File.WriteAllText(Path.Combine(placeholderDir, ".empty_dir"), string.Empty);
-                        }
+                            if (!Directory.EnumerateFileSystemEntries(sourcePath).Any())
+                            {
+                                var placeholderDir = Path.Combine(tempDir, relativeForFileSystem);
+                                Directory.CreateDirectory(placeholderDir);
+                                File.WriteAllText(Path.Combine(placeholderDir, ".empty_dir"), string.Empty);
+                            }
 
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException(ParamName);
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException(ParamName);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    throw new ArchiveException($"Failed to copy item '{item.RelativePath}' to temporary folder.",
+                        archivePath, tempDir, sevenZipPath, ex);
                 }
             }
 
             if (report.Removed.Any())
-            {
-                File.WriteAllText(Path.Combine(tempDir, "README_INSTRUCTIONS.txt"), GetInstructionsContent());
-                File.WriteAllText(Path.Combine(tempDir, "remove_deleted_files.ps1"),
-                    GetPowerShellScriptContent(report.Removed));
-                File.WriteAllText(Path.Combine(tempDir, "remove_deleted_files.bat"),
-                    GetBatchScriptContent(report.Removed));
-            }
+                try
+                {
+                    File.WriteAllText(Path.Combine(tempDir, "README_INSTRUCTIONS.txt"), GetInstructionsContent());
+                    File.WriteAllText(Path.Combine(tempDir, "remove_deleted_files.ps1"),
+                        GetPowerShellScriptContent(report.Removed));
+                    File.WriteAllText(Path.Combine(tempDir, "remove_deleted_files.bat"),
+                        GetBatchScriptContent(report.Removed));
+                }
+                catch (Exception ex)
+                {
+                    throw new ArchiveException("Failed to write cleanup scripts to temporary folder.", archivePath,
+                        tempDir, sevenZipPath, ex);
+                }
 
             var psi = new ProcessStartInfo
             {
@@ -149,15 +185,29 @@ public class ArchiveService
                 RedirectStandardError = true
             };
 
-            using var proc = Process.Start(psi)!;
+            using var proc = Process.Start(psi);
+            if (proc is null)
+                throw new ArchiveException("Failed to start 7-Zip process.", archivePath, tempDir, sevenZipPath);
+
             proc.WaitForExit();
+
+            var outStr = string.Empty;
+            var errStr = string.Empty;
+            try
+            {
+                outStr = proc.StandardOutput.ReadToEnd();
+                errStr = proc.StandardError.ReadToEnd();
+            }
+            catch
+            {
+                // ignore read failures but keep whatever we have
+            }
 
             if (proc.ExitCode != 0)
             {
-                var outStr = proc.StandardOutput.ReadToEnd();
-                var errStr = proc.StandardError.ReadToEnd();
                 Console.Error.WriteLine($"7za failed with code {proc.ExitCode}\n{outStr}\n{errStr}");
-                throw new InvalidOperationException("7za failed to create archive. See error output.");
+                throw new ArchiveException("7za failed to create archive. See error output.", archivePath, tempDir,
+                    proc.ExitCode, outStr, errStr, sevenZipPath);
             }
 
             return archivePath;
