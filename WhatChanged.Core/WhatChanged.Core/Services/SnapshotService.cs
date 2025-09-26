@@ -13,8 +13,10 @@ public class SnapshotService
         CancellationToken cancellationToken = default)
     {
         var entries = new Dictionary<string, FileSystemEntry>(StringComparer.OrdinalIgnoreCase);
-        var filesToHash = new List<(string relativePath, string fullPath, long size, DateTime lastWriteUtc)>();
+        var filesToHash =
+            new BlockingCollection<(string relativePath, string fullPath, long size, DateTime lastWriteUtc)>();
         var failedFiles = new ConcurrentBag<string>();
+        var hashedEntries = new ConcurrentDictionary<string, FileSystemEntry>(StringComparer.OrdinalIgnoreCase);
 
         var enumerationOptions = new EnumerationOptions
         {
@@ -25,6 +27,8 @@ public class SnapshotService
         const double timestampToleranceSeconds = 1.0;
 
         var totalEnumerated = 0;
+
+        var hashingTask = HashFilesAsync(filesToHash, hashedEntries, log, cancellationToken, failedFiles);
 
         try
         {
@@ -64,7 +68,7 @@ public class SnapshotService
                         entries[relativePath] =
                             new FileSystemEntry(EntryType.File, relativePath, baselineEntry.Hash, size, lastWriteUtc);
                     else
-                        filesToHash.Add((relativePath, entryPath, size, lastWriteUtc));
+                        filesToHash.Add((relativePath, entryPath, size, lastWriteUtc), cancellationToken);
                 }
                 catch (OperationCanceledException)
                 {
@@ -86,26 +90,14 @@ public class SnapshotService
             throw new SnapshotException("Failed while enumerating files.", rootPath, totalEnumerated, filesToHash.Count,
                 failedFiles.ToArray(), ex);
         }
-
-        if (filesToHash.Count > 0)
+        finally
         {
-            ConcurrentDictionary<string, FileSystemEntry> hashedEntries;
-            try
-            {
-                hashedEntries = await HashFilesAsync(filesToHash, log, cancellationToken, failedFiles);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new SnapshotException("Failed while hashing files.", rootPath, filesToHash.Count, 0,
-                    failedFiles.ToArray(), ex);
-            }
-
-            foreach (var kvp in hashedEntries) entries[kvp.Key] = kvp.Value;
+            filesToHash.CompleteAdding();
         }
+
+        await hashingTask;
+
+        foreach (var kvp in hashedEntries) entries[kvp.Key] = kvp.Value;
 
         if (failedFiles.Count > 0)
             log?.Invoke(
@@ -113,40 +105,39 @@ public class SnapshotService
 
         return entries;
 
-        static async Task<ConcurrentDictionary<string, FileSystemEntry>> HashFilesAsync(
-            List<(string relativePath, string fullPath, long size, DateTime lastWriteUtc)> files,
+        static async Task HashFilesAsync(
+            BlockingCollection<(string relativePath, string fullPath, long size, DateTime lastWriteUtc)> files,
+            ConcurrentDictionary<string, FileSystemEntry> hashedEntries,
             Action<string>? log = null,
             CancellationToken cancellationToken = default,
             ConcurrentBag<string>? failedFiles = null)
         {
-            var hashedEntries = new ConcurrentDictionary<string, FileSystemEntry>(StringComparer.OrdinalIgnoreCase);
             var parallelOptions = new ParallelOptions
             {
                 MaxDegreeOfParallelism = Environment.ProcessorCount,
                 CancellationToken = cancellationToken
             };
 
-            await Parallel.ForEachAsync(files, parallelOptions, async (file, token) =>
-            {
-                try
+            await Parallel.ForEachAsync(files.GetConsumingEnumerable(cancellationToken), parallelOptions,
+                async (file, token) =>
                 {
-                    var hash = await CalculateXxHash64Async(file.fullPath, token);
-                    var entry = new FileSystemEntry(EntryType.File, file.relativePath, hash, file.size,
-                        file.lastWriteUtc);
-                    hashedEntries[file.relativePath] = entry;
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    failedFiles?.Add(file.fullPath);
-                    log?.Invoke($"Failed to hash '{file.relativePath}': {ex.Message}");
-                }
-            });
-
-            return hashedEntries;
+                    try
+                    {
+                        var hash = await CalculateXxHash64Async(file.fullPath, token);
+                        var entry = new FileSystemEntry(EntryType.File, file.relativePath, hash, file.size,
+                            file.lastWriteUtc);
+                        hashedEntries[file.relativePath] = entry;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        failedFiles?.Add(file.fullPath);
+                        log?.Invoke($"Failed to hash '{file.relativePath}': {ex.Message}");
+                    }
+                });
         }
     }
 
