@@ -6,9 +6,6 @@ namespace WhatChanged.Core.Services;
 
 public class ManifestService
 {
-    private const string ManifestFilePrefix = "WhatChanged_";
-    private const string ManifestFileExtension = ".txt";
-
     public async Task<Manifest> ReadManifestAsync(string manifestPath)
     {
         var manifest = new Manifest();
